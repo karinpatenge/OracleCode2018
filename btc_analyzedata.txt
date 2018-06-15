@@ -1,0 +1,164 @@
+///////////////////////////////////////////////////////////////////////////
+// Loading Bitcoin transaction data into Property Graph using Groovy Shell
+//
+// Data Layer:          Oracle NoSQL DB with Big Data Spatial and Graph
+// Working environment: Big Data Lite VM 4.11
+// Author:              Karin Patenge
+// Last revision:       2018-05-30
+///////////////////////////////////////////////////////////////////////////
+
+// Start Groovy Shell connecting to Oracle NoSQL DB
+cd /opt/oracle/oracle-spatial-graph/property_graph/dal/groovy
+./gremlin-opg-nosql.sh
+
+server = new ArrayList(); 
+server.add("bigdatalite.localdomain:5000"); 
+
+// Create a graph config that contains the graph named "btc_2" 
+// KV store name is "kvstore"
+
+// Make sure to add all vertex properties that are later used in PGQL queries
+cfg = GraphConfigBuilder.forPropertyGraphNosql() \
+.setName("btc_2") \
+.setStoreName("kvstore") \
+.setHosts(server) \
+.addVertexProperty("bt_addr", PropertyType.STRING, "NA") \
+.addEdgeProperty("amount", PropertyType.FLOAT, 1.0f) \
+.hasEdgeLabel(true) \
+.setLoadEdgeLabel(true) \
+.setMaxNumConnections(2) \
+.build();
+
+opg = OraclePropertyGraph.getInstance(cfg);
+opg.getKVStoreConfig();
+
+// Count vertices and edges
+opg.countVertices();
+opg.countEdges();
+
+opg.getMaxVertexID();
+opg.getMaxEdgeID();
+
+// Transform into other Graph formats if required
+// OraclePropertyGraphUtils.exportGraphSON(opg, "/home/oracle/Documents/BTC/data/btc.graphson", System.out)
+// OraclePropertyGraphUtils.exportGraphML(opg, "/home/oracle/Documents/BTC/data/btc.graphml", System.out)
+
+// Get vertices and edges
+// opg.getVertices();
+// opg.getEdges();
+opg.getVertex(500l);
+opg.getEdge(751054l);
+
+// Get table names
+opg.getVertexTabName();
+opg.getEdgeTabName();
+
+
+// PGX Server already started
+// Create in-memory session and analyst for analytics
+session=Pgx.createSession("session_ID_1");
+analyst=session.createAnalyst();
+
+// Read the graph from Oracle NoSQL DB into memory
+pgxGraph = session.readGraphWithProperties(opg.getConfig());
+
+// Show memory consumption of the graph
+pgxGraph.getMemoryMb();
+
+
+////////////////////////////////////////////////////////////
+// Working with In-Memory Analyst
+
+// Count triangles
+tr=analyst.countTriangles(pgxGraph, true);
+
+// Use PageRank to find critical Bitcoin Addresses
+rank=analyst.pagerank(pgxGraph, 0.0001, 0.85, 100);
+// Get top 3 vertices
+rank.getTopKValues(3);
+opg.getVertex(88547l);
+opg.getVertex(45172l);
+opg.getVertex(18536l);
+
+// Degree Centrality
+dc=analyst.degreeCentrality(pgxGraph);
+bc.getTopKValues(3);
+opg.getVertex(45172l);
+opg.getVertex(78933l);
+opg.getVertex(2243l);
+
+// BetweenNess Centrality
+bc=analyst.vertexBetweennessCentrality(pgxGraph);
+// Get top 3 vertices
+bc.getTopKValues(3);
+opg.getVertex(45172l);
+opg.getVertex(78933l);
+opg.getVertex(2243l);
+
+// Approximate BetweenNess Centrality
+bc=analyst.approximateVertexBetweennessCentrality(pgxGraph, 10000);
+bc.getTopKValues(3);
+
+// Adamic Adar Counting
+//   The adamic-adar index compares the amount of neighbors shared between vertices, this measure can be used with communities.
+aac=analyst.adamicAdarCounting(pgxGraph);
+// Get top 3 vertices
+aac.getTopKValues(3);
+
+// Center
+//   Returning a vertex set holding the vertices from the periphery or center of the graph. Gives an overview of the extreme distances and the corresponding nodes in a graph.
+c = analyst.center(pgxGraph);
+
+///////////////////////////////////////////////////////////
+// Working with PGQL
+
+// Explore relationships in the graph
+pgxResultSet = pgxGraph.queryPgql("SELECT e.label(), count(*) WHERE (n) -[e]-> (m) GROUP BY e.label() ORDER BY count(*) DESC");
+pgxResultSet.print();
+
+// Find top most collaborative Bitcoin addresses
+pgxResultSet = pgxGraph.queryPgql("SELECT n, count(*) WHERE (n) -[e:contrib]-> (m) GROUP BY n ORDER BY count(*) DESC LIMIT 3");
+pgxResultSet.print(3);
+opg.getVertex(273095);
+
+// Find top least collaborative Bitcoin addresses
+pgxResultSet = pgxGraph.queryPgql("SELECT n, count(*) WHERE (n) -[e:contrib]-> (m) GROUP BY n ORDER BY count(*) ASC LIMIT 3");
+pgxResultSet.print(3);
+
+// Transfer to same address
+pgxResultSet = pgxGraph.queryPgql("SELECT x.id(), y.id(), e.amount WHERE (x) -[e]-> (y), x = y ORDER BY e.amount DESC LIMIT 3");
+pgxResultSet.print(3);
+
+// Transfer to same address via 1 other address
+pgxResultSet = pgxGraph.queryPgql("SELECT x.bt_addr, e1.amount, y.bt_addr, e2.amount, z.bt_addr WHERE (x) -[e1]-> (y) -[e2]-> (z), x = z ORDER BY x.bt_addr, y.bt_addr LIMIT 3");
+pgxResultSet.print(3);
+
+// Highest totals for Bitcoin transaction amounts
+pgxResultSet = pgxGraph.queryPgql("SELECT x.id(), y.id(), sum(e.amount)/100/1000/1000 as total_amount WHERE (x) -[e:contrib]-> (y) GROUP BY x.id(), y.id() ORDER BY total_amount DESC");
+pgxResultSet.print(3);
+
+// Highest totals for Bitcoin transaction amounts where sender address is equal with receiver address
+pgxResultSet = pgxGraph.queryPgql("SELECT x.id(), y.id(), sum(e.amount) as total_amount WHERE (x) -[e:contrib]-> (y), x = y GROUP BY x.id(), y.id() ORDER BY total_amount DESC");
+pgxResultSet.print();
+
+// Bitcoin transactions
+pgxResultSet = pgxGraph.queryPgql("PATH contrib := () -[:contrib]-> () SELECT x.id(), y.id(), x.bt_addr, y.bt_addr WHERE (x) -/:contrib*/-> (y), x = y");
+pgxResultSet.print(10);
+pgxResultSet = pgxGraph.queryPgql("PATH contrib := () -[:contrib]-> () SELECT x.id(), y.id(), x.bt_addr, y.bt_addr WHERE (x) -/:contrib*/-> (y), x != y");
+pgxResultSet.print(10);
+
+// InDegree count
+pgxResultSet = pgxGraph.queryPgql("SELECT n.id(), n.inDegree() WHERE (n) ORDER BY n.inDegree() DESC");
+pgxResultSet.print(3);
+
+// OutDegree count
+pgxResultSet = pgxGraph.queryPgql("SELECT n.id(), n.outDegree() WHERE (n) ORDER BY n.inDegree() DESC");
+
+// Addresses with incoming transactions only
+pgxResultSet = pgxGraph.queryPgql("pgxResultSet = pgxGraph.queryPgql("SELECT y.id(), y.bt_addr, y.inDegree() WHERE (y), y.inDegree() > 0 AND y.outDegree() = 0 ORDER BY y.inDegree() DESC LIMIT 10");");
+
+// Clean up graph session
+pgxGraph.close();
+
+// Quit Groovy shell
+:q
