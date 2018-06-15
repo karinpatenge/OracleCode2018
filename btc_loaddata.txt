@@ -1,0 +1,99 @@
+////////////////////////////////////////////////////////////////////////
+// Loading Blockchain and Bitcoin transaction data 
+// as Property Graph using Groovy Shell
+//
+// Data Storage Layer:  Oracle NoSQL DB (1 instance, kvlite) 
+//                      with Big Data Spatial and Graph
+// Working environment: Big Data Lite VM 4.11
+// Author:              Karin Patenge
+// Last revision:       2018-06-14
+////////////////////////////////////////////////////////////////////////
+
+// Create a subset of available bitcoin transaction data 
+//   having 100K nodes plus their edges
+head -n 100000 btc.opv > btc_subset.opv
+awk -F"," 'NR==FNR ? a[$1] : $2 in a' btc_subset.opv btc.ope > btc_temp.ope
+awk -F"," 'NR==FNR ? a[$1] : $3 in a' btc_subset.opv btc_temp.ope > btc_subset.ope
+rm btc_temp.ope
+
+// Check first whether Oracle NoSQL DB is up and running
+echo $KVHOME
+echo $KVROOT
+tree $KVROOT/kvstore
+
+java -jar $KVHOME/lib/kvstore.jar ping -port 5000 -host bigdatalite.localdomain
+java -jar $KVHOME/lib/kvcli.jar -host localhost -port 5000 -store kvstore
+> show topology
+> verify configuration
+> quit
+
+// Start Groovy Shell connecting to Oracle NoSQL DB
+cd /opt/oracle/oracle-spatial-graph/property_graph/dal/groovy
+./gremlin-opg-nosql.sh
+
+server = new ArrayList(); 
+server.add("bigdatalite.localdomain:5000"); 
+
+// Create a graph config that contains the graph name "btc" 
+// KV store name is "kvstore"
+
+// Make sure to add all vertex properties that are later used in PGQL queries
+cfg = GraphConfigBuilder.forPropertyGraphNosql() \
+.setName("btc") \
+.setStoreName("kvstore") \
+.setHosts(server) \
+.addVertexProperty("bt_addr", PropertyType.STRING, "NA") \
+.addEdgeProperty("amount", PropertyType.FLOAT, 1.0f) \
+.hasEdgeLabel(true) \
+.setLoadEdgeLabel(true) \
+.setMaxNumConnections(2) \
+.build();
+
+opg = OraclePropertyGraph.getInstance(cfg);
+opg.getKVStoreConfig();
+
+// Prepare for data load
+opg.setClearTableDOP(2);
+opg.clearRepository();
+
+// Count vertices and edges
+opg.countVertices();
+opg.countEdges();
+
+opgdl=OraclePropertyGraphDataLoader.getInstance();
+// Take only a subset of bitcoin transaction data: 100K nodes + all edges involved
+vfile="/home/oracle/Documents/BTC/data/btc_subset.opv";    // Flat file with vertices of Bitcoin transactions
+efile="/home/oracle/Documents/BTC/data/btc_subset.ope";    // Flat file with edges of Bitcoin transactions
+// efile="/home/oracle/Documents/BTC/data/btc_100K.ope";    // Flat file with subset of edges of Bitcoin transactions
+
+// Load data
+lStarttime=System.currentTimeMillis();
+opgdl.loadData(opg, vfile, efile, 2);
+System.out.println("Bitcoin transaction data loaded in " + (System.currentTimeMillis() - lStarttime)/1000 + " sec");
+
+// Count vertices and edges
+opg.countVertices();
+opg.countEdges();
+
+opg.getMaxVertexID();
+opg.getMaxEdgeID();
+
+// Export to other Graph formats if necessary
+// OraclePropertyGraphUtils.exportGraphSON(opg, "/home/oracle/Documents/BTC/data/btc.graphson", System.out)
+// OraclePropertyGraphUtils.exportGraphML(opg, "/home/oracle/Documents/BTC/data/btc.graphml", System.out)
+
+// Get vertices and edges
+// opg.getVertices();
+// opg.getEdges();
+opg.getVertex(500l);
+opg.getEdge(35242l);
+
+// Get table names
+opg.getVertexTabName();
+opg.getEdgeTabName();
+
+// Shut down instance
+opg.shutdown();
+
+// Quit Groovy shell
+:q
