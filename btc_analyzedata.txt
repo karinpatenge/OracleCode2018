@@ -1,11 +1,13 @@
-///////////////////////////////////////////////////////////////////////////
-// Loading Bitcoin transaction data into Property Graph using Groovy Shell
+////////////////////////////////////////////////////////////////////////
+// Analyze Blockchain and Bitcoin transaction data 
+// using PGX and PGQL
 //
-// Data Layer:          Oracle NoSQL DB with Big Data Spatial and Graph
+// Data Storage Layer:  Oracle NoSQL DB (1 instance, kvlite) 
+//                      with Big Data Spatial and Graph
 // Working environment: Big Data Lite VM 4.11
 // Author:              Karin Patenge
-// Last revision:       2018-05-30
-///////////////////////////////////////////////////////////////////////////
+// Last revision:       2018-06-14
+////////////////////////////////////////////////////////////////////////
 
 // Start Groovy Shell connecting to Oracle NoSQL DB
 cd /opt/oracle/oracle-spatial-graph/property_graph/dal/groovy
