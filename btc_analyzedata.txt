@@ -82,14 +82,13 @@ opg.getVertex(18536l);
 
 // Degree Centrality
 dc=analyst.degreeCentrality(pgxGraph);
-bc.getTopKValues(3);
+dc.getTopKValues(3);
 opg.getVertex(45172l);
 opg.getVertex(78933l);
 opg.getVertex(2243l);
 
 // BetweenNess Centrality
 bc=analyst.vertexBetweennessCentrality(pgxGraph);
-// Get top 3 vertices
 bc.getTopKValues(3);
 opg.getVertex(45172l);
 opg.getVertex(78933l);
@@ -102,7 +101,6 @@ bc.getTopKValues(3);
 // Adamic Adar Counting
 //   The adamic-adar index compares the amount of neighbors shared between vertices, this measure can be used with communities.
 aac=analyst.adamicAdarCounting(pgxGraph);
-// Get top 3 vertices
 aac.getTopKValues(3);
 
 // Center
